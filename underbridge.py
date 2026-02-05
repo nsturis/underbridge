@@ -1,4 +1,4 @@
-# Underbridge OP-Z multichannel exporter
+# Underbridge OP-Z and OP-XY multichannel exporter
 # Copyright 2022 Thomas Herrmann Email: herrmann@raise-uav.com
 
 import mido
@@ -10,6 +10,88 @@ from tkinter import ttk
 import time
 import threading
 import os
+
+
+# Device abstraction layer for OP-Z and OP-XY
+class DeviceInterface:
+    """Base class for device-specific MIDI implementations"""
+    
+    def __init__(self, outport):
+        self.outport = outport
+    
+    def mute_channel(self, channel, mute_value):
+        """Mute/unmute a specific channel"""
+        raise NotImplementedError
+    
+    def start_playback(self):
+        """Start MIDI playback"""
+        raise NotImplementedError
+    
+    def stop_playback(self):
+        """Stop MIDI playback"""
+        raise NotImplementedError
+    
+    def next_pattern(self):
+        """Advance to next pattern"""
+        raise NotImplementedError
+    
+    def get_device_name(self):
+        """Return device name for identification"""
+        raise NotImplementedError
+
+
+class OPZDevice(DeviceInterface):
+    """OP-Z specific MIDI implementation"""
+    
+    def get_device_name(self):
+        return "OP-Z"
+    
+    def mute_channel(self, channel, mute_value):
+        """OP-Z uses CC 53 for mute control"""
+        msg = mido.Message('control_change', control=53, channel=channel, value=mute_value)
+        self.outport.send(msg)
+    
+    def start_playback(self):
+        """Standard MIDI start message"""
+        msg = mido.Message('start')
+        self.outport.send(msg)
+    
+    def stop_playback(self):
+        """Standard MIDI stop message"""
+        msg = mido.Message('stop')
+        self.outport.send(msg)
+    
+    def next_pattern(self):
+        """OP-Z uses CC 103 value 16 for next pattern"""
+        msg = mido.Message('control_change', control=103, value=16)
+        self.outport.send(msg)
+
+
+class OPXYDevice(DeviceInterface):
+    """OP-XY specific MIDI implementation"""
+    
+    def get_device_name(self):
+        return "OP-XY"
+    
+    def mute_channel(self, channel, mute_value):
+        """OP-XY uses CC 53 for mute control (same as OP-Z)"""
+        msg = mido.Message('control_change', control=53, channel=channel, value=mute_value)
+        self.outport.send(msg)
+    
+    def start_playback(self):
+        """Standard MIDI start message"""
+        msg = mido.Message('start')
+        self.outport.send(msg)
+    
+    def stop_playback(self):
+        """Standard MIDI stop message"""
+        msg = mido.Message('stop')
+        self.outport.send(msg)
+    
+    def next_pattern(self):
+        """OP-XY uses CC 103 for pattern navigation (similar to OP-Z)"""
+        msg = mido.Message('control_change', control=103, value=16)
+        self.outport.send(msg)
 
 
 class Midirecorder:
@@ -25,6 +107,7 @@ class Midirecorder:
         self.loop_time = 0
         self.inport = 0
         self.outport = 0
+        self.device_interface = None  # Device abstraction instance
         self.path = 0
         self.folder = 0
         self.pattern_nr = 0
@@ -33,6 +116,7 @@ class Midirecorder:
         self.projectpath = 0
         self.cancel = 0
         self.RATE = 0
+        self.detected_device_type = None  # Store detected device type
         self.mute_list =[0] * 14 #Midi mute selection of all 14 necessary channels
         #modifier_dict = {"mod1": modifier1_va}
 
@@ -41,6 +125,7 @@ class Midirecorder:
         self.buttonsize_y = 2
        
         self.mode_select = IntVar()
+        self.device_select = IntVar()  # Device selection: 1=OP-Z, 2=OP-XY
         self.displaymsg = StringVar()
         self.modifier1_value = IntVar()
         self.modifier2_value = IntVar()
@@ -49,19 +134,33 @@ class Midirecorder:
         self.modifier5_value = IntVar()
         self.modifier6_value = IntVar()
 
+        deviceframe = LabelFrame(self.window, text="Device Selection", padx=10, pady=2, fg='white')
+        deviceframe.grid(row=0, column=0, padx=2, pady=2)
+
         upperframe= LabelFrame(self.window, text= "Parameter",padx= 10, pady =2, fg = 'white')
-        upperframe.grid(row = 0, column = 0, padx =2, pady =2,)
+        upperframe.grid(row = 1, column = 0, padx =2, pady =2,)
 
         lowerframe= Frame(self.window,padx= 10, pady =5)
-        lowerframe.grid(row = 2, column = 0, padx =2, pady =2)
+        lowerframe.grid(row = 3, column = 0, padx =2, pady =2)
 
         modifiers = LabelFrame(self.window, text= "Exclude Modifiers",padx= 10, pady =2, fg = 'white')
-        modifiers.grid(row = 1, column = 0, padx =2, pady =2)
+        modifiers.grid(row = 2, column = 0, padx =2, pady =2)
 
         footer= Frame(self.window,padx= 15, pady =2)
-        footer. grid(row = 3, column = 0, padx =2, pady =2)
+        footer. grid(row = 4, column = 0, padx =2, pady =2)
 
         #Get_BPM = Button(upperframe, text="Get BPM",width = self.buttonsize_x, height = self.buttonsize_y, fg = 'lightgrey', command = getBPM)
+        
+        # Device selection radio buttons
+        device_opz = Radiobutton(deviceframe, text='OP-Z', value=1, variable=self.device_select, 
+                                 width=self.buttonsize_x, height=self.buttonsize_y, indicatoron=0, bg='#0095FF')
+        device_opxy = Radiobutton(deviceframe, text='OP-XY', value=2, variable=self.device_select, 
+                                  width=self.buttonsize_x, height=self.buttonsize_y, indicatoron=0, bg='#0095FF')
+        device_opz.select()  # Default to OP-Z
+        
+        device_opz.grid(row=0, column=0, padx=5, pady=2)
+        device_opxy.grid(row=0, column=1, padx=5, pady=2)
+        
         Song = Radiobutton(lowerframe, text= 'Project', value = 2 , variable = self.mode_select, width = self.buttonsize_x, height = self.buttonsize_y , indicatoron = 0, bg= '#1b7d24' )
         Pattern = Radiobutton(lowerframe, text= 'Pattern', value = 3 , variable = self.mode_select, width = self.buttonsize_x, height = self.buttonsize_y, indicatoron = 0,bg= '#1b7d24' )
         Pattern.select()
@@ -130,13 +229,53 @@ class Midirecorder:
         #global op_device
         device_list = mido.get_output_names()
         print (device_list)
-        try: 
-            self.op_device = list(filter(lambda x: 'OP-Z' in x, device_list))        
-            self.op_device = self.op_device[0]
-            #print (self.op_device)
-            self.displaymsg.set("OP-Z found")
-        except:
-            self.displaymsg.set("Can´t find OP-Z : MIDI Error.")
+        
+        # Try to detect based on user selection first, then auto-detect
+        selected_device = self.device_select.get()
+        device_found = False
+        
+        if selected_device == 1:  # User selected OP-Z
+            try: 
+                self.op_device = list(filter(lambda x: 'OP-Z' in x, device_list))        
+                self.op_device = self.op_device[0]
+                self.detected_device_type = "OP-Z"
+                self.displaymsg.set("OP-Z found")
+                device_found = True
+            except:
+                pass
+        elif selected_device == 2:  # User selected OP-XY
+            try:
+                self.op_device = list(filter(lambda x: 'OP-XY' in x, device_list))
+                self.op_device = self.op_device[0]
+                self.detected_device_type = "OP-XY"
+                self.displaymsg.set("OP-XY found")
+                device_found = True
+            except:
+                pass
+        
+        # If selected device not found, try auto-detection
+        if not device_found:
+            try: 
+                self.op_device = list(filter(lambda x: 'OP-Z' in x, device_list))        
+                self.op_device = self.op_device[0]
+                self.detected_device_type = "OP-Z"
+                self.displaymsg.set("OP-Z found (auto-detected)")
+                device_found = True
+            except:
+                pass
+        
+        if not device_found:
+            try:
+                self.op_device = list(filter(lambda x: 'OP-XY' in x, device_list))
+                self.op_device = self.op_device[0]
+                self.detected_device_type = "OP-XY"
+                self.displaymsg.set("OP-XY found (auto-detected)")
+                device_found = True
+            except:
+                pass
+        
+        if not device_found:
+            self.displaymsg.set("Can't find OP-Z or OP-XY: MIDI Error.")
 
     def getAudioDevice(self):
         #global audio_device
@@ -148,14 +287,29 @@ class Midirecorder:
             for i in range(0, numdevices):
                 if (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
                     print("Input Device id ", i, " - ", p.get_device_info_by_host_api_device_index(0, i).get('name'))
+            
+            # Search for the device based on detected type or user selection
+            device_search_name = None
+            if self.detected_device_type:
+                device_search_name = self.detected_device_type
+            elif self.device_select.get() == 1:
+                device_search_name = "OP-Z"
+            elif self.device_select.get() == 2:
+                device_search_name = "OP-XY"
+            
             for i in range(0, numdevices):
-                #audio_device = p.get_device_info_by_host_api_device_index(0, i).get('name')
-                if "OP-Z" in p.get_device_info_by_host_api_device_index(0, i).get('name') and (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
+                device_name = p.get_device_info_by_host_api_device_index(0, i).get('name')
+                max_channels = p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')
+                
+                if device_search_name and device_search_name in device_name and max_channels > 0:
                     self.audio_device = i
-            #audio_device = 4           
-            print ("Detected OP-Z audio at Index:",self.audio_device, p.get_device_info_by_host_api_device_index(0, self.audio_device).get('name'))
-        except:
-            self.displaymsg.set("OP-Z Audio Device not found.")
+                    print(f"Detected {device_search_name} audio at Index:", self.audio_device, device_name)
+                    break
+            
+            if not hasattr(self, 'audio_device') or self.audio_device is None:
+                self.displaymsg.set(f"{device_search_name or 'Device'} Audio Device not found.")
+        except Exception as e:
+            self.displaymsg.set(f"Audio Device Error: {str(e)}")
 
         #devinfo = p.get_device_info_by_index(self.audio_device)  
         try:         
@@ -195,6 +349,17 @@ class Midirecorder:
         #global outport  
         #global op_device
         self.outport= mido.open_output(self.op_device)    
+        
+        # Initialize device interface based on detected device type
+        if self.detected_device_type == "OP-Z":
+            self.device_interface = OPZDevice(self.outport)
+        elif self.detected_device_type == "OP-XY":
+            self.device_interface = OPXYDevice(self.outport)
+        else:
+            # Default to OP-Z for backward compatibility
+            self.device_interface = OPZDevice(self.outport)
+        
+        print(f"Initialized device interface: {self.device_interface.get_device_name()}")
         #displaymsg.set("OP-Z MIDI not connected :(")
         #print(self.outport) 
 
@@ -214,33 +379,52 @@ class Midirecorder:
             self.mute_list[i+7] = eval(checkbutton_name).get()       #9th position in mute list  
 
         for k in range (0,14):
-            msg = mido.Message('control_change',control= 53, channel= k, value= self.mute_list[k])
-            self.outport.send(msg)
+            if self.device_interface:
+                self.device_interface.mute_channel(k, self.mute_list[k])
+            else:
+                # Fallback to direct message if device interface not initialized
+                msg = mido.Message('control_change',control= 53, channel= k, value= self.mute_list[k])
+                self.outport.send(msg)
         #print("Muted Channels",self.mute_list)
 
     def setSolo(self,chn):        
-        msg = mido.Message('control_change',control= 53, channel= chn, value=0)        
-        self.outport.send(msg)
+        if self.device_interface:
+            self.device_interface.mute_channel(chn, 0)
+        else:
+            msg = mido.Message('control_change',control= 53, channel= chn, value=0)        
+            self.outport.send(msg)
         
     def start_MIDI(self):        
-        msg = mido.Message('start')
-        self.outport.send(msg)
+        if self.device_interface:
+            self.device_interface.start_playback()
+        else:
+            msg = mido.Message('start')
+            self.outport.send(msg)
         self.displaymsg.set("Playback started")
         #print("midi")
 
     def stop_MIDI(self):        
-        msg = mido.Message('stop')
-        self.outport.send(msg)
+        if self.device_interface:
+            self.device_interface.stop_playback()
+        else:
+            msg = mido.Message('stop')
+            self.outport.send(msg)
         self.displaymsg.set("Playback stopped")
 
     def unmuteAll(self):        
         for i in range (0,15):
-            msg = mido.Message('control_change',control= 53, channel= i, value=0)
-            self.outport.send(msg)        
+            if self.device_interface:
+                self.device_interface.mute_channel(i, 0)
+            else:
+                msg = mido.Message('control_change',control= 53, channel= i, value=0)
+                self.outport.send(msg)        
 
     def nextPattern(self):        
-        msg = mido.Message('control_change', control = 103, value = 16)
-        self.outport.send(msg)
+        if self.device_interface:
+            self.device_interface.next_pattern()
+        else:
+            msg = mido.Message('control_change', control = 103, value = 16)
+            self.outport.send(msg)
         self.displaymsg.set("Next Pattern")
 
     def nextSong(self):
