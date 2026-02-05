@@ -1,11 +1,12 @@
-# Underbridge for OP-Z
+# Underbridge for OP-Z and OP-XY
 ## Multitrack exporter
 ---
 
 ## Description
 
 - Exports patterns and projects individual audio tracks to seperate folders for use in your DAW.
-- Python cross plattform with single file binary for x86 linux Windows and Mac.
+- Supports both Teenage Engineering OP-Z and OP-XY devices.
+- Python cross platform with single file binary for x86 linux Windows and Mac.
 
 ## Using Packaged single file Binarys _(The easy way)_
 
@@ -34,7 +35,7 @@ Underbridge_alt was packaged on a different system. Might help if you run into p
 - install pipwin: `pip install pipwin`
 - install pyaudio `pipwin install pyaudio`
 
-**- Activate OP-Z device input in sound settings of windows and make it default (Should detect automatically just to be sure. **
+**- Activate OP-Z or OP-XY device input in sound settings of windows and make it default (Should detect automatically just to be sure). **
 **- Close all other Applications that might use any audio source like your Browser etc **
 
 - run `python underbridge.py`
@@ -49,7 +50,7 @@ install pyaudio: `pip install pyaudio`
 
 If the last step fails with the error `ERROR: Could not build wheels for pyaudio, which is required to install pyproject.toml-based projects`, and you are on a M1 Pro chipset, follow [these instructions](https://i.stack.imgur.com/Xn0bm.png).
 
-**Set OP-Z device as input in sound of system preferences**
+**Set OP-Z or OP-XY device as input in sound of system preferences**
 
 open terminal and type: `python3 underbridge.py` to start
 
@@ -64,8 +65,9 @@ open terminal and type: `python3 underbridge.py` to start
 
 ## Steps
 
-- connect OP-Z via USB
+- connect OP-Z or OP-XY via USB
 - Run underbridge
+- Select your device type (OP-Z or OP-XY) in the Device Selection panel
 
 ### Single Pattern Mode
 
@@ -80,7 +82,7 @@ open terminal and type: `python3 underbridge.py` to start
 
 ### Project mode
 
-- Select Porject and first Pattern you want to export on OP-Z.
+- Select Project and first Pattern you want to export on your device (OP-Z or OP-XY).
 - Enter name for the project. This is used for the folder structure
 - Get BPM from led code or Smartphone app.
 - Enter BPM
@@ -93,4 +95,33 @@ open terminal and type: `python3 underbridge.py` to start
 
 ### Troubleshooting
 - When the recorded audio contains buzzing or other artifacts try disabling the USB charging with "display" and "bottom right key" to disable.
-- If the playback of the OP-Z starts correctly but no tracks are muted check that MIDI IN in the OP-Z app or via combo is enabled.
+- If the playback starts correctly but no tracks are muted check that MIDI IN is enabled (via device app or combo on device).
+- If device is not detected, ensure it's connected via USB and try selecting the correct device type in the Device Selection panel.
+
+## Device-Specific Information
+
+### OP-Z vs OP-XY
+
+Both devices are supported with the same workflow:
+- **OP-Z**: Original implementation with full pattern and project export support
+- **OP-XY**: Uses similar MIDI control mappings for mute, solo, and pattern navigation
+
+### MIDI Implementation
+
+Both devices use:
+- **CC 53**: Channel mute/unmute control (value 0 = unmuted, value 1 = muted)
+- **CC 103**: Pattern navigation (value 16 = next pattern)
+- **Standard MIDI Start/Stop**: For playback control
+
+### Device Selection
+
+The application will:
+1. First try to connect to the device type you select (OP-Z or OP-XY)
+2. If the selected device is not found, it will auto-detect any connected device
+3. Display a message indicating which device was found
+
+### Known Limitations
+
+- Only one device type can be used at a time
+- Device must be connected via USB before starting the application
+- Device must be set as the system's default audio input device
