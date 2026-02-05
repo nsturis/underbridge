@@ -6,7 +6,7 @@
 
 - Exports patterns and projects individual audio tracks to seperate folders for use in your DAW.
 - Supports both Teenage Engineering OP-Z and OP-XY devices.
-- Python cross plattform with single file binary for x86 linux Windows and Mac.
+- Python cross platform with single file binary for x86 linux Windows and Mac.
 
 ## Using Packaged single file Binarys _(The easy way)_
 
@@ -82,7 +82,7 @@ open terminal and type: `python3 underbridge.py` to start
 
 ### Project mode
 
-- Select Porject and first Pattern you want to export on OP-Z.
+- Select Project and first Pattern you want to export on your device (OP-Z or OP-XY).
 - Enter name for the project. This is used for the folder structure
 - Get BPM from led code or Smartphone app.
 - Enter BPM
@@ -95,7 +95,8 @@ open terminal and type: `python3 underbridge.py` to start
 
 ### Troubleshooting
 - When the recorded audio contains buzzing or other artifacts try disabling the USB charging with "display" and "bottom right key" to disable.
-- If the playback of the OP-Z starts correctly but no tracks are muted check that MIDI IN in the OP-Z app or via combo is enabled.
+- If the playback starts correctly but no tracks are muted check that MIDI IN is enabled (via device app or combo on device).
+- If device is not detected, ensure it's connected via USB and try selecting the correct device type in the Device Selection panel.
 
 ## Device-Specific Information
 

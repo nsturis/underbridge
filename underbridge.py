@@ -103,7 +103,7 @@ class Midirecorder:
         self.window.tk_setPalette(background='#565A5E', foreground='black',activeBackground='#283867', activeForeground='black' )
         #device_list = []
         self.op_device = []
-        self.audio_device = []
+        self.audio_device = None  # Initialize to None for proper detection checking
         self.loop_time = 0
         self.inport = 0
         self.outport = 0
